@@ -18,7 +18,7 @@ Al terminar tendremos:
 - El correo personal protegido mediante GitHub `noreply`.
 - Un repositorio local validado.
 - Un repositorio GitHub conectado mediante HTTPS.
-- Un primer `push` realizado desde el equipo.
+- Un primer `push` realizado y verificado desde el equipo.
 
 ---
 
@@ -461,7 +461,7 @@ Keep my email addresses private
 Block command line pushes that expose my email
 ```
 
-GitHub proporciona entonces una dirección similar a:
+GitHub proporciona una dirección similar a:
 
 ```text
 <ID>+<github-user>@users.noreply.github.com
@@ -500,6 +500,8 @@ Nombre Apellidos
 Esta configuración es local al equipo.
 
 No modifica automáticamente Git en otros ordenadores.
+
+Si utilizamos Git desde otros equipos, tendremos que revisar allí su propia configuración.
 
 ---
 
@@ -571,7 +573,7 @@ Author: Nombre Apellidos <noreply>
 Commit: Nombre Apellidos <noreply>
 ```
 
-Después podemos eliminar el repositorio temporal.
+Después podemos eliminar el repositorio temporal:
 
 ```powershell
 cd ~
@@ -612,6 +614,12 @@ cd git-github-windows-setup
 git init
 ```
 
+Podemos abrir directamente la carpeta en VS Code:
+
+```powershell
+code .
+```
+
 ---
 
 # 20. Crear el repositorio en GitHub
@@ -634,9 +642,64 @@ De esta forma el repositorio remoto nace vacío.
 
 ---
 
-# 21. Conectar el repositorio local con GitHub
+# 21. Preparar el primer commit real
 
-> Esta sección se validará realizando el primer push real.
+Creamos nuestro `README.md` dentro del repositorio local y comprobamos el estado:
+
+```powershell
+git status
+```
+
+Inicialmente aparecerá como:
+
+```text
+Untracked files:
+    README.md
+```
+
+Lo añadimos al staging area:
+
+```powershell
+git add README.md
+```
+
+Volvemos a comprobar:
+
+```powershell
+git status
+```
+
+Ahora debería aparecer:
+
+```text
+Changes to be committed:
+    new file: README.md
+```
+
+Creamos el primer commit:
+
+```powershell
+git commit -m "Document Git and GitHub setup on Windows"
+```
+
+Podemos comprobar el autor antes de publicar nada:
+
+```powershell
+git log -1 --format=fuller
+```
+
+Debemos confirmar que utiliza:
+
+```text
+Nombre Apellidos
+<ID>+<github-user>@users.noreply.github.com
+```
+
+y no nuestra dirección personal.
+
+---
+
+# 22. Conectar el repositorio local con GitHub
 
 Añadimos el remoto HTTPS:
 
@@ -657,47 +720,202 @@ origin  https://github.com/<github-user>/git-github-windows-setup.git (fetch)
 origin  https://github.com/<github-user>/git-github-windows-setup.git (push)
 ```
 
-Añadimos este README:
+Todavía no se ha transferido ningún archivo.
 
-```powershell
-git add README.md
+Simplemente hemos indicado que:
+
+```text
+origin
 ```
 
-Comprobamos:
+representa ese repositorio remoto.
 
-```powershell
-git status
-```
+---
 
-Creamos el primer commit:
+# 23. Primer `push` y autenticación con GitHub
 
-```powershell
-git commit -m "Document Git and GitHub setup on Windows"
-```
-
-Finalmente:
+Realizamos:
 
 ```powershell
 git push -u origin main
 ```
 
-En la primera operación autenticada Git Credential Manager debería iniciar el proceso de autorización con GitHub.
+En la primera operación autenticada, Git Credential Manager solicita completar la autenticación mediante el navegador:
 
-Una vez completado, `main` quedará asociado a:
+```text
+info: please complete authentication in your browser...
+```
+
+Se abre el flujo de autenticación de GitHub.
+
+Una vez autorizada la operación, no es necesario copiar manualmente contraseñas ni tokens en PowerShell.
+
+El proceso continúa automáticamente.
+
+En una ejecución real, el resultado fue equivalente a:
+
+```text
+Enumerating objects: 3, done.
+Counting objects: 100% (3/3), done.
+Compressing objects: 100% (2/2), done.
+Writing objects: 100% (3/3), done.
+
+To https://github.com/<github-user>/git-github-windows-setup.git
+ * [new branch]      main -> main
+
+branch 'main' set up to track 'origin/main'.
+```
+
+Esto valida el circuito completo:
+
+```text
+repositorio local
+      ↓
+commit
+      ↓
+HTTPS
+      ↓
+Git Credential Manager
+      ↓
+autenticación GitHub
+      ↓
+origin/main
+```
+
+---
+
+# 24. ¿Qué hace `-u`?
+
+El comando utilizado fue:
+
+```powershell
+git push -u origin main
+```
+
+La opción:
+
+```text
+-u
+```
+
+establece la rama remota como upstream de nuestra rama local.
+
+Después de ese primer push:
+
+```text
+main
+```
+
+queda asociada con:
 
 ```text
 origin/main
 ```
 
-y los siguientes pushes podrán hacerse simplemente con:
+Por eso los siguientes envíos normalmente pueden realizarse simplemente con:
 
 ```powershell
 git push
 ```
 
+y las actualizaciones con:
+
+```powershell
+git pull
+```
+
+sin tener que indicar cada vez:
+
+```text
+origin main
+```
+
 ---
 
-# 22. Principios utilizados
+# 25. Comprobar el estado final
+
+Podemos comprobar:
+
+```powershell
+git status
+```
+
+Si no hemos realizado más cambios debería mostrar algo equivalente a:
+
+```text
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+```
+
+También podemos comprobar el remoto:
+
+```powershell
+git remote -v
+```
+
+y el historial:
+
+```powershell
+git log --oneline
+```
+
+En GitHub deberíamos encontrar ya:
+
+- la rama `main`;
+- el `README.md`;
+- nuestro primer commit;
+- el commit asociado a nuestra cuenta de GitHub;
+- el correo personal no expuesto en la metadata del commit.
+
+---
+
+# 26. Flujo normal a partir de ahora
+
+Una vez realizada la configuración inicial, el trabajo normal dentro de un repositorio será mucho más sencillo.
+
+Después de modificar archivos:
+
+```powershell
+git status
+```
+
+Revisamos los cambios:
+
+```powershell
+git diff
+```
+
+Añadimos únicamente lo que queremos incluir:
+
+```powershell
+git add <archivo>
+```
+
+o, cuando corresponda:
+
+```powershell
+git add .
+```
+
+Creamos el commit:
+
+```powershell
+git commit -m "Descripción clara del cambio"
+```
+
+Y publicamos:
+
+```powershell
+git push
+```
+
+El trabajo de configuración inicial no tiene que repetirse en cada commit.
+
+---
+
+# 27. Principios utilizados
 
 Esta configuración sigue varias reglas deliberadas.
 
@@ -733,6 +951,12 @@ core.autocrlf=input
 
 permite trabajar cómodamente desde Windows manteniendo LF en los repositorios.
 
+Los proyectos que necesiten reglas más estrictas podrán utilizar:
+
+```text
+.gitattributes
+```
+
 ## Privacidad por defecto
 
 Utilizamos el correo `noreply` como configuración global.
@@ -745,30 +969,57 @@ git config user.email "correo-especifico@example.com"
 
 sin modificar la configuración global.
 
+## No confundir privacidad con anonimato
+
+La dirección `noreply` evita publicar directamente nuestro correo personal en los commits.
+
+No pretende ocultar nuestra identidad.
+
+En un repositorio público normalmente queremos precisamente que el trabajo pueda asociarse correctamente con nuestra cuenta de GitHub.
+
 ---
 
-# 23. Resultado
+# 28. Resultado final
 
-Una vez terminado el proceso tendremos validado el flujo completo:
+El proceso completo queda validado:
 
 ```text
-Windows
-   ↓
+Windows 11
+    ↓
+Visual Studio Code
+    ↓
 PowerShell
-   ↓
-Git
-   ↓
+    ↓
+Git for Windows
+    ↓
 Repositorio local
-   ↓
-Commit
-   ↓
+    ↓
+Commit con identidad verificada
+    ↓
+Email GitHub noreply
+    ↓
 HTTPS
-   ↓
+    ↓
 Git Credential Manager
-   ↓
+    ↓
+Autenticación mediante navegador
+    ↓
 GitHub
+    ↓
+origin/main
 ```
 
-El objetivo no es simplemente que Git funcione.
+La configuración final proporciona:
 
-El objetivo es entender qué configuración estamos utilizando y por qué.
+- Git accesible desde PowerShell.
+- VS Code integrado como editor.
+- `main` como rama inicial.
+- finales de línea adecuados para proyectos multiplataforma;
+- `pull` conservador mediante fast-forward only;
+- autenticación HTTPS mediante Git Credential Manager;
+- protección del correo personal;
+- un flujo Git/GitHub completamente probado.
+
+El objetivo no es simplemente conseguir que Git funcione.
+
+El objetivo es entender qué configuración estamos utilizando, qué problema resuelve cada opción y mantener el entorno lo más sencillo posible hasta que aparezca una necesidad real de hacerlo más complejo.
