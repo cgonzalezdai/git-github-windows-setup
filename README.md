@@ -1,55 +1,329 @@
-# Configurar Git y GitHub en Windows desde cero
+# Git y GitHub en Windows con evolución hacia WSL
 
-Guía práctica para preparar Git y GitHub en un equipo Windows destinado a desarrollo profesional, tomando cada decisión de configuración de forma consciente.
+Este repositorio documenta una configuración real de Git y GitHub que comenzó en Windows y posteriormente se amplió para trabajar también con proyectos dentro de WSL.
 
-Este documento nace de una instalación real sobre un Windows 11 recién preparado. El objetivo no es aceptar todos los valores por defecto ni instalar herramientas adicionales "por si acaso", sino construir una configuración sencilla, comprensible y mantenible.
+Si estás valorando una configuración parecida, aquí puedes encontrar respuesta a cuatro preguntas concretas:
 
-## Objetivo
+* **¿Qué configuración de Git se utiliza en Windows?**
+* **¿Qué cambia cuando un proyecto pasa a trabajarse dentro de WSL?**
+* **¿Qué conviene mantener coherente entre Git Windows y Git Linux y qué no hace falta duplicar?**
+* **¿Cómo comprobar que cada capa funciona antes de añadir la siguiente?**
 
-Al terminar tendremos:
+No pretende ser una configuración universal. Es una referencia práctica basada en un entorno que se ha ido ampliando únicamente cuando apareció una necesidad concreta.
 
-- Visual Studio Code instalado.
-- Git for Windows funcionando desde PowerShell.
-- VS Code como editor de Git.
-- `main` como rama inicial.
-- Una política de finales de línea adecuada para proyectos multiplataforma.
-- Git Credential Manager preparado para GitHub.
-- Los commits asociados correctamente a nuestra cuenta.
-- El correo personal protegido mediante GitHub `noreply`.
-- Un repositorio local validado.
-- Un repositorio GitHub conectado mediante HTTPS.
-- Un primer `push` realizado y verificado desde el equipo.
+## Arquitectura
 
----
-
-# 1. Punto de partida
-
-Partimos de:
+La separación actual es:
 
 ```text
-Windows 11 x64
-Git: no instalado
-VS Code: no instalado
-Cuenta GitHub: existente
-Terminal principal: PowerShell
+WINDOWS
+├── Visual Studio Code
+├── PowerShell
+├── Git for Windows
+├── Git Credential Manager
+└── herramientas Windows
+
+WSL
+└── Linux
+    ├── Bash
+    ├── Git Linux
+    ├── runtimes de proyecto
+    ├── repositorios Linux
+    └── herramientas CLI
 ```
 
-Antes de instalar nada podemos comprobarlo desde PowerShell:
+Visual Studio Code se ejecuta gráficamente en Windows.
+
+Cuando se abre un proyecto dentro de WSL:
+
+```text
+VS Code Server
+terminal
+Git
+runtime
+filesystem
+```
+
+pertenecen al entorno Linux.
+
+No se instala una segunda copia gráfica de VS Code dentro de WSL.
+
+## Git en Windows
+
+Configuración global relevante:
+
+```text
+init.defaultBranch=main
+pull.ff=only
+core.autocrlf=input
+credential.helper=manager
+http.sslbackend=schannel
+```
+
+La configuración efectiva puede revisarse con:
 
 ```powershell
-git --version
-code --version
+git config --list --show-origin
 ```
 
-Si Windows responde que alguno de los comandos no existe, esa herramienta todavía no está instalada o no se encuentra en el `PATH`.
+La procedencia es importante porque permite distinguir entre configuración global, configuración local del repositorio y otros valores que puedan estar actuando.
 
----
+### Rama inicial
 
-# 2. Instalar Visual Studio Code
+```powershell
+git config --global init.defaultBranch main
+```
 
-Instalamos primero Visual Studio Code porque posteriormente podremos seleccionarlo directamente como editor de Git.
+### Pull solo mediante fast-forward
 
-Utilizamos:
+```powershell
+git config --global pull.ff only
+```
+
+Si las ramas local y remota han divergido, Git se detiene en lugar de decidir automáticamente entre merge y rebase.
+
+### Finales de línea
+
+```powershell
+git config --global core.autocrlf input
+```
+
+Esta configuración mantiene LF en el repositorio y evita convertir automáticamente a CRLF durante el checkout.
+
+Los repositorios con necesidades específicas deberían definirlas mediante `.gitattributes`.
+
+Un aviso similar a:
+
+```text
+CRLF will be replaced by LF
+```
+
+no demuestra por sí mismo que se esté produciendo una conversión masiva de archivos. Antes de modificar la configuración conviene comprobar el `diff` real.
+
+## Identidad de Git
+
+Git necesita una identidad para crear commits:
+
+```bash
+git config --global user.name "Nombre Apellidos"
+git config --global user.email "<email>"
+```
+
+Para repositorios públicos puede utilizarse la dirección `noreply` proporcionada por GitHub.
+
+No debe inventarse. Debe utilizarse exactamente la dirección asignada a la cuenta.
+
+La configuración puede verificarse con:
+
+```bash
+git config --global --get user.name
+git config --global --get user.email
+```
+
+y en un commit real mediante:
+
+```bash
+git log -1 --format=fuller
+```
+
+## Git en WSL
+
+WSL utiliza una instalación independiente de Git:
+
+```text
+Git for Windows
+≠
+Git Linux
+```
+
+Cada una mantiene su propia configuración.
+
+No se copia automáticamente toda la configuración de Windows a Linux.
+
+Sí se mantienen coherentes las decisiones que deben representar el mismo flujo de trabajo:
+
+```text
+user.name
+user.email
+init.defaultBranch
+pull.ff
+core.autocrlf
+```
+
+Otras opciones son específicas de cada plataforma.
+
+Por ejemplo:
+
+```text
+http.sslbackend=schannel
+```
+
+pertenece a Git for Windows y no debe trasladarse mecánicamente a Git Linux.
+
+La configuración Linux puede comprobarse igual:
+
+```bash
+git config --list --show-origin
+```
+
+## Reutilizar Git Credential Manager desde WSL
+
+Git Linux puede reutilizar Git Credential Manager instalado en Windows sin necesidad de mantener un segundo gestor independiente.
+
+La configuración utilizada es equivalente a:
+
+```bash
+git config --global credential.helper \
+"/mnt/c/Program\\ Files/Git/mingw64/bin/git-credential-manager.exe"
+```
+
+Conceptualmente:
+
+```text
+Git Linux
+    ↓
+Git Credential Manager de Windows
+    ↓
+GitHub
+```
+
+Git Windows y Git Linux continúan siendo instalaciones independientes. Lo que se reutiliza es la gestión de credenciales.
+
+## Dónde guardar los repositorios
+
+Para proyectos cuyo entorno natural es Linux se utiliza el filesystem Linux:
+
+```text
+/home/<usuario>/...
+```
+
+Esto permite mantener en el mismo entorno:
+
+```text
+repositorio
+Git
+terminal
+runtime
+herramientas
+```
+
+WSL permite trabajar también sobre archivos de Windows mediante `/mnt/c`, pero no se utiliza esa ubicación por defecto para un proyecto Linux únicamente por comodidad.
+
+La ubicación se decide según el entorno real de trabajo del proyecto.
+
+## Validación por capas
+
+La configuración no se dio por válida simplemente porque los comandos fueran aceptados.
+
+Se comprobó progresivamente.
+
+### 1. Git local
+
+Crear un repositorio temporal:
+
+```bash
+git init
+git status
+```
+
+Comprobar:
+
+```text
+rama inicial
+identidad
+commit
+configuración efectiva
+```
+
+### 2. Repositorio remoto
+
+Después de validar Git local se comprobó por separado la comunicación con el repositorio remoto.
+
+De esta forma, un posible problema de autenticación o transporte no se confunde con un problema de la configuración local de Git.
+
+### 3. Git dentro de WSL
+
+Una vez incorporado Linux se repitieron las pruebas utilizando:
+
+```text
+Git Linux
+filesystem Linux
+terminal Linux
+```
+
+### 4. Escritura remota sin cambio real
+
+Para comprobar desde WSL que la autenticación y los permisos de escritura funcionaban se utilizó:
+
+```bash
+git push --dry-run origin HEAD:refs/heads/wsl-auth-test
+```
+
+La prueba permite validar la operación sin crear realmente la rama remota.
+
+Después se comprobó que la rama no existía.
+
+## Configuración comprobada
+
+### Windows
+
+```text
+Git for Windows                  OK
+VS Code                          OK
+rama main                        OK
+identidad Git                    OK
+pull.ff=only                     OK
+core.autocrlf=input              OK
+Git Credential Manager           OK
+acceso al remoto                 OK
+escritura                        OK
+```
+
+### WSL
+
+```text
+Git Linux                        OK
+filesystem Linux                 OK
+VS Code Server                   OK
+identidad Git                    OK
+pull.ff=only                     OK
+core.autocrlf=input              OK
+GCM de Windows desde WSL         OK
+acceso al remoto                 OK
+push --dry-run                   OK
+```
+
+## Herramientas no añadidas por anticipado
+
+Durante la construcción de este entorno no se instalaron algunas capas mientras no existiese un proyecto que las necesitase.
+
+Por ejemplo:
+
+```text
+GitHub CLI
+SSH específico para GitHub
+Docker
+Dev Containers
+CUDA en WSL
+otros runtimes o servicios
+```
+
+Que no formen parte de esta configuración no significa que no sean útiles.
+
+Simplemente no son requisitos de esta arquitectura.
+
+## Referencia de la instalación inicial en Windows
+
+El repositorio nació documentando con bastante detalle la instalación inicial de Git for Windows.
+
+Esa información sigue siendo útil como referencia, aunque ya no es la parte principal del documento.
+
+<details>
+<summary>Opciones utilizadas durante la instalación inicial</summary>
+
+### Visual Studio Code
+
+Instalación:
 
 ```text
 Visual Studio Code Stable
@@ -57,969 +331,95 @@ User Installer
 x64
 ```
 
-El User Installer se instala por defecto en una ruta similar a:
+Opciones relevantes:
 
 ```text
-C:\Users\<usuario>\AppData\Local\Programs\Microsoft VS Code
+Abrir con Code para directorios       ON
+Registrar Code como editor            ON
+Agregar VS Code al PATH               ON
 ```
 
-No es necesario ejecutar el instalador como administrador.
-
-## Opciones seleccionadas
-
-Durante la instalación:
-
-```text
-Crear acceso directo en escritorio                   OFF
-Abrir con Code para archivos                         OFF
-Abrir con Code para directorios                      ON
-Registrar Code como editor para tipos compatibles    ON
-Agregar VS Code al PATH                              ON
-```
-
-La integración de directorios permite abrir directamente un proyecto mediante el menú contextual de Windows.
-
-Agregar VS Code al `PATH` nos permite utilizar:
-
-```powershell
-code .
-```
-
-para abrir la carpeta actual en el editor.
-
-## Comprobación
-
-Después de instalarlo, abrimos una nueva PowerShell:
+Comprobación:
 
 ```powershell
 code --version
 ```
 
-Deberíamos obtener la versión instalada y la arquitectura:
+### Git for Windows
+
+Instalación x64 en la ruta estándar.
+
+Componentes utilizados:
 
 ```text
-1.x.x
-...
-x64
+Open Git Bash here                    ON
+Git LFS                               ON
+Associate .git* files                 ON
+Git GUI                               OFF
+Scalar                                OFF
 ```
 
----
-
-# 3. Instalar Git for Windows
-
-Instalamos Git for Windows x64.
-
-Ruta estándar:
+Git accesible desde:
 
 ```text
-C:\Program Files\Git
+PowerShell
+VS Code
+otras herramientas
 ```
 
-No existe una razón especial para modificarla.
-
----
-
-# 4. Componentes de Git
-
-Durante el instalador seleccionamos únicamente los componentes que tienen una utilidad clara.
-
-## Windows Explorer integration
-
-```text
-Open Git Bash here    ON
-Open Git GUI here     OFF
-```
-
-Git Bash puede resultar útil cuando necesitamos puntualmente una shell Unix.
-
-Git GUI no es necesario si ya trabajamos con VS Code y terminal.
-
-## Git LFS
-
-```text
-Git LFS    ON
-```
-
-Git Large File Storage no obliga a utilizarlo, pero permite trabajar correctamente con repositorios que ya dependan de LFS.
-
-## Asociaciones
-
-```text
-Associate .git* configuration files    ON
-Associate .sh files with Bash          OFF
-```
-
-No necesitamos convertir Bash en el manejador global de scripts `.sh` de Windows.
-
-## Actualizaciones automáticas
-
-```text
-Check daily for Git for Windows updates    OFF
-```
-
-Preferimos actualizar deliberadamente cuando corresponda en lugar de añadir comprobaciones automáticas innecesarias.
-
-## Scalar
-
-```text
-Scalar    OFF
-```
-
-Está orientado a repositorios extremadamente grandes y no existe inicialmente una necesidad que justifique instalarlo.
-
----
-
-# 5. Editor predeterminado de Git
-
-Seleccionamos:
-
-```text
-Use Visual Studio Code as Git's default editor
-```
-
-No utilizamos VS Code Insiders.
-
-La configuración resultante puede comprobarse posteriormente mediante:
-
-```powershell
-git config --global --get core.editor
-```
-
-y debería apuntar a VS Code con `--wait`.
-
----
-
-# 6. Rama inicial
-
-Configuramos:
-
-```text
-Override the default branch name for new repositories
-main
-```
-
-Así un:
-
-```powershell
-git init
-```
-
-creará directamente:
-
-```text
-main
-```
-
-en lugar de necesitar un renombrado posterior.
-
----
-
-# 7. Git desde PowerShell
-
-Elegimos:
-
-```text
-Git from the command line and also from 3rd-party software
-```
-
-Esto permite utilizar Git desde:
-
-- PowerShell;
-- VS Code;
-- otras herramientas de desarrollo.
-
-No seleccionamos la opción que añade todas las herramientas Unix incluidas con Git al `PATH` de Windows, evitando posibles conflictos con comandos nativos.
-
----
-
-# 8. SSH
-
-Seleccionamos:
+SSH incluido:
 
 ```text
 Use bundled OpenSSH
 ```
 
-Git for Windows incluye su propia implementación de OpenSSH.
-
-Esto no impide utilizar otras herramientas como PuTTY o WinSCP para administrar servidores.
-
-Para GitHub utilizaremos inicialmente HTTPS, por lo que no necesitamos crear claves SSH en esta fase.
-
----
-
-# 9. Backend HTTPS
-
-Seleccionamos:
+Backend HTTPS:
 
 ```text
 Use the native Windows Secure Channel library
 ```
 
-La configuración equivalente es:
+Editor Git:
 
 ```text
-http.sslbackend=schannel
+Visual Studio Code
 ```
 
-Con ello Git utiliza el almacén de certificados de Windows en lugar de mantener una gestión independiente mediante OpenSSL.
-
----
-
-# 10. Finales de línea
-
-Esta es una de las decisiones más importantes cuando desarrollamos en Windows pero el código también debe funcionar correctamente en Linux, contenedores o servidores.
-
-Seleccionamos:
+Terminal de Git Bash:
 
 ```text
-Checkout as-is, commit Unix-style line endings
+MinTTY
 ```
 
-La configuración resultante es:
+Opciones adicionales:
 
 ```text
-core.autocrlf=input
+Enable file system caching            ON
+Enable symbolic links                 OFF
 ```
 
-Esto significa:
-
-```text
-Checkout:
-Git no convierte automáticamente LF a CRLF.
-
-Commit:
-Si encuentra CRLF en un archivo de texto, lo normaliza a LF.
-```
-
-Es una base razonable para proyectos multiplataforma.
-
-Los proyectos que necesiten reglas específicas deberían definirlas posteriormente mediante:
-
-```text
-.gitattributes
-```
-
-dentro del propio repositorio.
-
----
-
-# 11. Terminal de Git Bash
-
-Seleccionamos:
-
-```text
-Use MinTTY
-```
-
-Esto afecta únicamente a Git Bash.
-
-PowerShell puede seguir siendo nuestra terminal habitual.
-
----
-
-# 12. Comportamiento de `git pull`
-
-Seleccionamos:
-
-```text
-Fast-forward only
-```
-
-La configuración equivalente es:
-
-```text
-pull.ff=only
-```
-
-Con esta política un:
-
-```powershell
-git pull
-```
-
-actualizará normalmente la rama si puede realizar un `fast-forward`.
-
-Si nuestra rama local y la remota han divergido, Git se detendrá en lugar de decidir automáticamente entre:
-
-```text
-merge
-rebase
-```
-
-Esto obliga a resolver conscientemente la situación.
-
----
-
-# 13. Credential Manager
-
-Seleccionamos:
-
-```text
-Git Credential Manager
-```
-
-La configuración resultante incluye:
-
-```text
-credential.helper=manager
-```
-
-Git Credential Manager permite realizar autenticación moderna con GitHub mediante HTTPS sin guardar manualmente contraseñas o tokens dentro de scripts o configuraciones.
-
----
-
-# 14. Opciones adicionales
-
-Seleccionamos:
-
-```text
-Enable file system caching    ON
-Enable symbolic links         OFF
-```
-
-La configuración resultante incluye:
-
-```text
-core.fscache=true
-core.symlinks=false
-```
-
-Los symbolic links pueden habilitarse cuando exista un proyecto que realmente los necesite.
-
----
-
-# 15. Comprobar la instalación
-
-Abrimos una nueva PowerShell:
+Después de instalar:
 
 ```powershell
 git --version
-```
-
-Resultado esperado:
-
-```text
-git version 2.x.x.windows.x
-```
-
-También podemos comprobar toda la configuración efectiva:
-
-```powershell
 git config --list --show-origin
 ```
 
-Entre otras opciones deberíamos encontrar:
+</details>
+
+## Criterio utilizado
+
+La configuración se construyó siguiendo este orden:
 
 ```text
-http.sslbackend=schannel
-core.autocrlf=input
-core.fscache=true
-core.symlinks=false
-pull.ff=only
-credential.helper=manager
-init.defaultbranch=main
+entender
+→ comprobar
+→ decidir
+→ instalar
+→ validar
+→ documentar
 ```
 
----
+El repositorio no pretende mostrar todas las herramientas que podrían formar parte de un entorno Windows + Linux.
 
-# 16. Configurar identidad
-
-Git almacena en cada commit:
-
-```text
-user.name
-user.email
-```
-
-El nombre puede configurarse globalmente:
-
-```powershell
-git config --global user.name "Nombre Apellidos"
-```
-
-Antes de configurar el email conviene decidir si queremos publicar nuestra dirección real dentro del historial Git.
-
-Para repositorios públicos puede ser preferible utilizar la dirección `noreply` proporcionada por GitHub.
-
----
-
-# 17. Proteger el correo personal en GitHub
-
-En:
-
-```text
-GitHub
-Settings
-Emails
-```
-
-activamos:
-
-```text
-Keep my email addresses private
-Block command line pushes that expose my email
-```
-
-GitHub proporciona una dirección similar a:
-
-```text
-<ID>+<github-user>@users.noreply.github.com
-```
-
-Por ejemplo:
-
-```text
-12345678+usuario@users.noreply.github.com
-```
-
-No debemos inventar esta dirección.
-
-Utilizamos exactamente la que GitHub muestra en nuestra cuenta.
-
-La configuramos en Git:
-
-```powershell
-git config --global user.email "<ID>+<github-user>@users.noreply.github.com"
-```
-
-Comprobamos:
-
-```powershell
-git config --global --get user.name
-git config --global --get user.email
-```
-
-Resultado esperado:
-
-```text
-Nombre Apellidos
-<ID>+<github-user>@users.noreply.github.com
-```
-
-Esta configuración es local al equipo.
-
-No modifica automáticamente Git en otros ordenadores.
-
-Si utilizamos Git desde otros equipos, tendremos que revisar allí su propia configuración.
-
----
-
-# 18. Probar Git completamente en local
-
-Antes de involucrar GitHub podemos validar Git con un repositorio temporal.
-
-```powershell
-mkdir "$env:TEMP\git-test"
-cd "$env:TEMP\git-test"
-
-git init
-git status
-```
-
-Deberíamos ver:
-
-```text
-On branch main
-
-No commits yet
-```
-
-Creamos un archivo:
-
-```powershell
-'Prueba de configuración Git' | Set-Content README.md
-```
-
-Lo añadimos:
-
-```powershell
-git add README.md
-```
-
-En Windows puede aparecer:
-
-```text
-warning: in the working copy of 'README.md',
-CRLF will be replaced by LF the next time Git touches it
-```
-
-No es un error.
-
-Es precisamente el comportamiento esperado de:
-
-```text
-core.autocrlf=input
-```
-
-Git está avisando de que normalizará el archivo a LF al almacenarlo.
-
-Creamos el commit:
-
-```powershell
-git commit -m "Test Git configuration"
-```
-
-Y comprobamos su metadata:
-
-```powershell
-git log -1 --format=fuller
-```
-
-Debemos verificar:
-
-```text
-Author: Nombre Apellidos <noreply>
-Commit: Nombre Apellidos <noreply>
-```
-
-Después podemos eliminar el repositorio temporal:
-
-```powershell
-cd ~
-Remove-Item "$env:TEMP\git-test" -Recurse -Force
-```
-
----
-
-# 19. Organización local de repositorios
-
-Para mantener una estructura sencilla podemos utilizar:
-
-```text
-C:\Users\<usuario>\dev\
-├── publicos\
-└── privados\
-```
-
-No es obligatorio separar repositorios públicos y privados, pero puede resultar útil si queremos mantener una organización visual clara.
-
-Tampoco conviene crear por adelantado carpetas para tecnologías o herramientas que todavía no utilizamos.
-
-Un repositorio público puede quedar, por ejemplo:
-
-```text
-C:\Users\<usuario>\dev\publicos\git-github-windows-setup
-```
-
-Lo creamos:
-
-```powershell
-mkdir "$HOME\dev\publicos"
-cd "$HOME\dev\publicos"
-
-mkdir git-github-windows-setup
-cd git-github-windows-setup
-
-git init
-```
-
-Podemos abrir directamente la carpeta en VS Code:
-
-```powershell
-code .
-```
-
----
-
-# 20. Crear el repositorio en GitHub
-
-Creamos desde GitHub un repositorio público:
-
-```text
-git-github-windows-setup
-```
-
-Para que el primer commit proceda realmente de nuestro equipo local, inicialmente no añadimos desde GitHub:
-
-```text
-README
-.gitignore
-License
-```
-
-De esta forma el repositorio remoto nace vacío.
-
----
-
-# 21. Preparar el primer commit real
-
-Creamos nuestro `README.md` dentro del repositorio local y comprobamos el estado:
-
-```powershell
-git status
-```
-
-Inicialmente aparecerá como:
-
-```text
-Untracked files:
-    README.md
-```
-
-Lo añadimos al staging area:
-
-```powershell
-git add README.md
-```
-
-Volvemos a comprobar:
-
-```powershell
-git status
-```
-
-Ahora debería aparecer:
-
-```text
-Changes to be committed:
-    new file: README.md
-```
-
-Creamos el primer commit:
-
-```powershell
-git commit -m "Document Git and GitHub setup on Windows"
-```
-
-Podemos comprobar el autor antes de publicar nada:
-
-```powershell
-git log -1 --format=fuller
-```
-
-Debemos confirmar que utiliza:
-
-```text
-Nombre Apellidos
-<ID>+<github-user>@users.noreply.github.com
-```
-
-y no nuestra dirección personal.
-
----
-
-# 22. Conectar el repositorio local con GitHub
-
-Añadimos el remoto HTTPS:
-
-```powershell
-git remote add origin https://github.com/<github-user>/git-github-windows-setup.git
-```
-
-Comprobamos:
-
-```powershell
-git remote -v
-```
-
-Resultado esperado:
-
-```text
-origin  https://github.com/<github-user>/git-github-windows-setup.git (fetch)
-origin  https://github.com/<github-user>/git-github-windows-setup.git (push)
-```
-
-Todavía no se ha transferido ningún archivo.
-
-Simplemente hemos indicado que:
-
-```text
-origin
-```
-
-representa ese repositorio remoto.
-
----
-
-# 23. Primer `push` y autenticación con GitHub
-
-Realizamos:
-
-```powershell
-git push -u origin main
-```
-
-En la primera operación autenticada, Git Credential Manager solicita completar la autenticación mediante el navegador:
-
-```text
-info: please complete authentication in your browser...
-```
-
-Se abre el flujo de autenticación de GitHub.
-
-Una vez autorizada la operación, no es necesario copiar manualmente contraseñas ni tokens en PowerShell.
-
-El proceso continúa automáticamente.
-
-En una ejecución real, el resultado fue equivalente a:
-
-```text
-Enumerating objects: 3, done.
-Counting objects: 100% (3/3), done.
-Compressing objects: 100% (2/2), done.
-Writing objects: 100% (3/3), done.
-
-To https://github.com/<github-user>/git-github-windows-setup.git
- * [new branch]      main -> main
-
-branch 'main' set up to track 'origin/main'.
-```
-
-Esto valida el circuito completo:
-
-```text
-repositorio local
-      ↓
-commit
-      ↓
-HTTPS
-      ↓
-Git Credential Manager
-      ↓
-autenticación GitHub
-      ↓
-origin/main
-```
-
----
-
-# 24. ¿Qué hace `-u`?
-
-El comando utilizado fue:
-
-```powershell
-git push -u origin main
-```
-
-La opción:
-
-```text
--u
-```
-
-establece la rama remota como upstream de nuestra rama local.
-
-Después de ese primer push:
-
-```text
-main
-```
-
-queda asociada con:
-
-```text
-origin/main
-```
-
-Por eso los siguientes envíos normalmente pueden realizarse simplemente con:
-
-```powershell
-git push
-```
-
-y las actualizaciones con:
-
-```powershell
-git pull
-```
-
-sin tener que indicar cada vez:
-
-```text
-origin main
-```
-
----
-
-# 25. Comprobar el estado final
-
-Podemos comprobar:
-
-```powershell
-git status
-```
-
-Si no hemos realizado más cambios debería mostrar algo equivalente a:
-
-```text
-On branch main
-Your branch is up to date with 'origin/main'.
-
-nothing to commit, working tree clean
-```
-
-También podemos comprobar el remoto:
-
-```powershell
-git remote -v
-```
-
-y el historial:
-
-```powershell
-git log --oneline
-```
-
-En GitHub deberíamos encontrar ya:
-
-- la rama `main`;
-- el `README.md`;
-- nuestro primer commit;
-- el commit asociado a nuestra cuenta de GitHub;
-- el correo personal no expuesto en la metadata del commit.
-
----
-
-# 26. Flujo normal a partir de ahora
-
-Una vez realizada la configuración inicial, el trabajo normal dentro de un repositorio será mucho más sencillo.
-
-Después de modificar archivos:
-
-```powershell
-git status
-```
-
-Revisamos los cambios:
-
-```powershell
-git diff
-```
-
-Añadimos únicamente lo que queremos incluir:
-
-```powershell
-git add <archivo>
-```
-
-o, cuando corresponda:
-
-```powershell
-git add .
-```
-
-Creamos el commit:
-
-```powershell
-git commit -m "Descripción clara del cambio"
-```
-
-Y publicamos:
-
-```powershell
-git push
-```
-
-El trabajo de configuración inicial no tiene que repetirse en cada commit.
-
----
-
-# 27. Principios utilizados
-
-Esta configuración sigue varias reglas deliberadas.
-
-## No instalar por anticipado
-
-No hemos añadido:
-
-- GitHub CLI;
-- clientes Git adicionales;
-- gestores SSH adicionales;
-- herramientas de sincronización;
-- extensiones de VS Code innecesarias.
-
-Se instalarán únicamente si aparece una necesidad real.
-
-## Mantener decisiones explícitas
-
-Preferimos:
-
-```text
-pull.ff=only
-```
-
-antes que permitir que `git pull` cree automáticamente merges o rebases sin que lo hayamos decidido.
-
-## Preparar el entorno para Windows y Linux
-
-La política:
-
-```text
-core.autocrlf=input
-```
-
-permite trabajar cómodamente desde Windows manteniendo LF en los repositorios.
-
-Los proyectos que necesiten reglas más estrictas podrán utilizar:
-
-```text
-.gitattributes
-```
-
-## Privacidad por defecto
-
-Utilizamos el correo `noreply` como configuración global.
-
-Si un proyecto concreto necesita utilizar otra dirección podemos sobrescribirla únicamente dentro de ese repositorio:
-
-```powershell
-git config user.email "correo-especifico@example.com"
-```
-
-sin modificar la configuración global.
-
-## No confundir privacidad con anonimato
-
-La dirección `noreply` evita publicar directamente nuestro correo personal en los commits.
-
-No pretende ocultar nuestra identidad.
-
-En un repositorio público normalmente queremos precisamente que el trabajo pueda asociarse correctamente con nuestra cuenta de GitHub.
-
----
-
-# 28. Resultado final
-
-El proceso completo queda validado:
-
-```text
-Windows 11
-    ↓
-Visual Studio Code
-    ↓
-PowerShell
-    ↓
-Git for Windows
-    ↓
-Repositorio local
-    ↓
-Commit con identidad verificada
-    ↓
-Email GitHub noreply
-    ↓
-HTTPS
-    ↓
-Git Credential Manager
-    ↓
-Autenticación mediante navegador
-    ↓
-GitHub
-    ↓
-origin/main
-```
-
-La configuración final proporciona:
-
-- Git accesible desde PowerShell.
-- VS Code integrado como editor.
-- `main` como rama inicial.
-- finales de línea adecuados para proyectos multiplataforma;
-- `pull` conservador mediante fast-forward only;
-- autenticación HTTPS mediante Git Credential Manager;
-- protección del correo personal;
-- un flujo Git/GitHub completamente probado.
-
-El objetivo no es simplemente conseguir que Git funcione.
-
-El objetivo es entender qué configuración estamos utilizando, qué problema resuelve cada opción y mantener el entorno lo más sencillo posible hasta que aparezca una necesidad real de hacerlo más complejo.
+Documenta únicamente las decisiones que llegaron a utilizarse y las comprobaciones realizadas para saber que funcionaban.
